@@ -7,8 +7,8 @@ Authors@R: c(
     person("Hyolitta","Araújo", role="aut", email="hyolitta01@gmail.com"),
     person("Pierre","Hitalo", role="aut", email="pierrehitalo@gmail.com"),
     person("Wallace", "Souza", role = "aut", email="wpsfarias@gmail.com"),
-    person("Jevuks","Araújo", role="aut", email="jevuks@gmail.com"),
-    person("UFPB - Universidade Federal da Paraíba", role = c("cph", "fnd")))
+    person("Jevuks","Araújo", role="aut", email="jevuks@gmail.com")
+)
 Maintainer: Pedro Jorge <pedro.alves@ipea.gov.br>
 Description: Creation of an inequality index capable of selecting important variables,
              weights for each variable and normalizing the selected variables.
