@@ -1,0 +1,40 @@
+Type: Package
+Package: IBrCRM_index
+Title: Índice Brasileiro de Competitividade Regional Municipal (IBrCRM)
+Version: 0.1.0
+Authors@R: c(
+    person("Pedro Jorge","Alves", role=c("aut"), email="pedro.alves@ipea.gov.br"),
+    person("Hyolitta","Araújo", role="aut", email="hyolitta01@gmail.com"),
+    person("Pierre","Hitalo", role="aut", email="pierrehitalo@gmail.com"),
+    person("Wallace", "Souza", role = "aut", email="wpsfarias@gmail.com"),
+    person("Jevuks","Araújo", role="aut", email="jevuks@gmail.com"),
+    person("UFPB - Universidade Federal da Paraíba", role = c("cph", "fnd")))
+Maintainer: Pedro Jorge <pedro.alves@ipea.gov.br>
+Description: Creation of an inequality index capable of selecting important variables,
+             weights for each variable and normalizing the selected variables.
+License: MIT + file LICENSE
+URL: https://github.com/PedroJorge7/IBrCRM_index
+BugReports: https://github.com/PedroJorge7/IBrCRM_index/issues
+Depends: 
+    R (>= 3.3.2)
+Imports:
+    dplyr,
+    tidyr,
+    glmnet,
+    stats,
+    scales,
+    ggplot2
+Suggests: 
+    abjData,
+    data.table,
+    dplyr,
+    forcats,
+    geobr,
+    rmarkdown,
+    sf
+VignetteBuilder: 
+    knitr
+LazyData: true
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3

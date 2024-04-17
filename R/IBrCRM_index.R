@@ -1,49 +1,44 @@
-#' Ggplot theme for Ipea charts and figures
+#' Índice Brasileiro de Competitividade Regional Municipal (IBrCRM)
 #'
-#' @description Applies a custom theme for ggplot figures following the editorial
-#' guidelines used by the Institute for Applied Economic Research - Ipea. The
-#' function includes standardized formatting of options for axis lines, text,
+#' @description Creation of an inequality index capable of selecting important variables,
+#' weights for each variable and normalizing the selected variables.
 #'
-#' @param axis_lines A character vector specifying the axis style. Valid options are
+#' @param variables A character vector specifying the axis style. Valid options are
 #'        `"none"` (no axis lines), `"full"` (full-length axis lines), and
 #'        `"half"` (half-length axis lines), the default.
-#' @param axis_values Logical value indicating whether to show text elements. If `TRUE`,
+#' @param reference_variables Logical value indicating whether to show text elements. If `TRUE`,
 #'        axis text will be displayed in black; otherwise, they will
 #'        be hidden.
-#' @param legend.position A character vector specifying the position of the
+#' @param inverse_variables A character vector specifying the position of the
 #'        legend. Valid options are `"right"` (default), `"left"`, `"top"`, and
 #'        `"bottom"`.
-#' @param grid.adjust Defines whether the grid lines should be `"horizontal"`
+#' @param group_by Defines whether the grid lines should be `"horizontal"`
 #'       (default) or `"vertical"`.
-#' @param x_breaks Numeric. The number of breaks on the x-axis
-#' @param y_breaks Numeric. The number of breaks on the y-axis
-#' @param expand_x_limit Logical value that indicates whether the x-axis
+#' @param adjust_outliers Numeric. The number of breaks on the x-axis
+#' @param include_weight Numeric. The number of breaks on the y-axis
+#' @param standardization_method Logical value that indicates whether the x-axis
 #'        boundary should be expanded. If `TRUE`, the x-axis limits will be
 #'        expanded; otherwise there will be no change
-#' @param expand_y_limit Logical value that indicates whether the y-axis
-#'        boundary should be expanded. If `TRUE`, the x-axis limits will be
-#'        expanded; otherwise there will be no change
-#' @param x_text_angle Numeric. Angle in degrees of the text in the x-axis.
-#' @param include_x_text_title Logical. Whether to include x text title Defaults to `TRUE`.
-#' @param include_y_text_title Logical. Whether to include x text title. Defaults to `TRUE`.
-#' @param include_ticks Logical. Whether to include ticks. Defaults to `TRUE`.
-#' @param ... Additional arguments to be passed to the `theme` function from the
-#'        `ggplot2` package.
 #'
-#' @return A custom theme for IPEA graphics.
-#' @import ggplot2 ggthemes rlang
+#' @return A `data.frame` output.
+#' @import dplyr tidyr glmnet stats scales
 #' @export
-#' @family ggplot2 theme functions
+#' @family IBrCRM_index output
 #'
 #' @examples
-#' # Creating theme for ggplot2 graph using default arguments
-#' library(ggplot2)
-#' fig_raw <- ggplot() +
-#'   geom_col(data = mtcars, aes(x = hp , y = mpg, fill = cyl)) +
-#'   theme_ipea()
-#'
+#' library(dplyr)
+#' variables <- c('mpg','cyl','hp','drat','wt','qsec','vs','am','gear')
+#' reference_variables <- c('cyl','mpg')
+#' group_by <- c('carb')
+#' inverse_variables <- c('wt')
+#' 
+#' IBrCRM <- IBrCRM_index(mtcars,variables = variables, reference_variables = reference_variables,
+#'                        inverse_variables = inverse_variables,
+#'                        group_by = group_by,
+#'                        adjust_outliers =TRUE, include_weight = TRUE,
+#'                        standardization_method = c('mean'))
 
-#### FUNCAO
+
 IBrCRM_index <- function(df,variables,reference_variables,inverse_variables,
                         group_by = NULL,adjust_outliers =TRUE, include_weight = TRUE,
                         standardization_method = c('mean','discrete','none')) {

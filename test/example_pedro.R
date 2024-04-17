@@ -1,7 +1,7 @@
 
 # Update documentation
-#devtools::document(pkg = ".")
-remotes::install_github("ipeadata-lab/ipeaplot")
+devtools::document(pkg = ".")
+remotes::install_github("PedroJorge7/IBrCRM_index")
 
 ## EXEMPLO 
 df <- readRDS("./test/df_agregado_bases_inputado.rds")
