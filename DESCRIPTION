@@ -1,5 +1,5 @@
 Type: Package
-Package: IBrCRM_index
+Package: IBrCRMindex
 Title: Indice Brasileiro de Competitividade Regional Municipal (IBrCRM)
 Version: 0.1.0
 Authors@R: c(
