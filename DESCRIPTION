@@ -3,7 +3,7 @@ Package: IBrCRM_index
 Title: Índice Brasileiro de Competitividade Regional Municipal (IBrCRM)
 Version: 0.1.0
 Authors@R: c(
-    person("Pedro Jorge","Alves", role=c("aut"), email="pedro.alves@ipea.gov.br"),
+    person("Pedro","Jorge", role=c("aut"), email="pedro.alves@ipea.gov.br"),
     person("Hyolitta","Araújo", role="aut", email="hyolitta01@gmail.com"),
     person("Pierre","Hitalo", role="aut", email="pierrehitalo@gmail.com"),
     person("Wallace", "Souza", role = "aut", email="wpsfarias@gmail.com"),
