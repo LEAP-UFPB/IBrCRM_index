@@ -1,6 +1,8 @@
 
 # Update documentation
 devtools::document(pkg = ".")
+devtools::check(pkg = ".",  cran = FALSE, env_vars = c(NOT_CRAN = "true"))
+
 remotes::install_github("PedroJorge7/IBrCRM_index")
 
 ## EXEMPLO 
