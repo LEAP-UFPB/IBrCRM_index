@@ -23,7 +23,7 @@
 #' @return A `data.frame` output.
 #' @import dplyr tidyr glmnet stats scales
 #' @export
-#' @family IBrCRM_index output
+#' @family IBrCRMindex output
 #'
 #' @examples
 #' library(dplyr)
@@ -32,14 +32,14 @@
 #' group_by <- c('carb')
 #' inverse_variables <- c('wt')
 #' 
-#' IBrCRM <- IBrCRM_index(mtcars,variables = variables, reference_variables = reference_variables,
+#' IBrCRM <- IBrCRMindex(mtcars,variables = variables, reference_variables = reference_variables,
 #'                        inverse_variables = inverse_variables,
 #'                        group_by = group_by,
 #'                        adjust_outliers =TRUE, include_weight = TRUE,
 #'                        standardization_method = c('mean'))
 
 
-IBrCRM_index <- function(df,variables,reference_variables,inverse_variables,
+IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
                         group_by = NULL,adjust_outliers =TRUE, include_weight = TRUE,
                         standardization_method = c('mean','discrete','none')) {
   

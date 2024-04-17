@@ -29,7 +29,7 @@ variables <- c('operacoes_credito','estabelecimentos','empregados',
 reference_variables <- c('pib','massa_salarial','balanca_comercial')
 
 
-IBrCRM_economico <- IBrCRM_index(df,variables = variables, reference_variables = reference_variables,
+IBrCRM_economico <- IBrCRMindex(df,variables = variables, reference_variables = reference_variables,
                                  inverse_variables = inverse_variables,
                                  group_by = "name_biome_region_area",
                                  adjust_outliers =TRUE, include_weight = TRUE,
