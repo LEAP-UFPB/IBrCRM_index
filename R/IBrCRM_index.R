@@ -12,7 +12,7 @@
 #' @param inverse_variables A character vector specifying the position of the
 #'        legend. Valid options are `"right"` (default), `"left"`, `"top"`, and
 #'        `"bottom"`.
-#' @param group_by Defines whether the grid lines should be `"horizontal"`
+#' @param dplyr::group_by Defines whether the grid lines should be `"horizontal"`
 #'       (default) or `"vertical"`.
 #' @param adjust_outliers Numeric. The number of breaks on the x-axis
 #' @param include_weight Numeric. The number of breaks on the y-axis
@@ -29,18 +29,18 @@
 #' library(dplyr)
 #' variables <- c('mpg','cyl','hp','drat','wt','qsec','vs','am','gear')
 #' reference_variables <- c('cyl','mpg')
-#' group_by <- c('carb')
+#' dplyr::group_by <- c('carb')
 #' inverse_variables <- c('wt')
 #' 
 #' IBrCRM <- IBrCRMindex(mtcars,variables = variables, reference_variables = reference_variables,
 #'                        inverse_variables = inverse_variables,
-#'                        group_by = group_by,
+#'                        dplyr::group_by = dplyr::group_by,
 #'                        adjust_outliers =TRUE, include_weight = TRUE,
 #'                        standardization_method = c('mean'))
 
 
 IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
-                        group_by = NULL,adjust_outliers =TRUE, include_weight = TRUE,
+                        dplyr::group_by = NULL,adjust_outliers =TRUE, include_weight = TRUE,
                         standardization_method = c('mean','discrete','none')) {
   
   options(dplyr.summarise.inform = FALSE)
@@ -48,17 +48,17 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
   
   # Criando base para elastic net
   wb <- df %>% 
-    group_by(ano) %>% 
+    dplyr::group_by(ano) %>% 
     dplyr::summarise(across(everything(), list(mean = ~mean(., na.rm = T)))) %>% 
-    mutate(across(everything(), ~ ifelse(. == 0 | is.nan(.),NA,.))) %>% 
+    dplyr::mutate(across(everything(), ~ ifelse(. == 0 | is.nan(.),NA,.))) %>% 
     ungroup() %>% ungroup() %>% 
-    select(c(paste0(variables,"_mean")))
+    dplyr::select(c(paste0(variables,"_mean")))
   
   # Garantindo preenchimento de tudo
   
   for(i in 1:nrow(wb)){
     wb <- wb %>% 
-      mutate(across(c(everything()), ~ ifelse(is.na(.),lead(.) - mean(((. - lag(.))/lag(.)), na.rm = T)*lead(.),.)))
+      dplyr::mutate(across(c(everything()), ~ ifelse(is.na(.),lead(.) - mean(((. - lag(.))/lag(.)), na.rm = T)*lead(.),.)))
     
   }
   
@@ -76,7 +76,7 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
     for(i in paste0(reference_variables,"_mean")){
       
       # Excluir coluna de resposta das vari?veis preditoras
-      X <- wb %>% select(-c(i)) %>% as.matrix()
+      X <- wb %>% dplyr::select(-c(i)) %>% as.matrix()
       Y <- as.numeric(wb[[i]])
 
       
@@ -89,7 +89,7 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
       results <- coef(fit)
       results <- as.data.frame(as.matrix(results))
       results <- data.frame(variable = rownames(results),ref = i, coef = results$s0)
-      results <- results %>% filter(!grepl('Intercept',variable))
+      results <- results %>% dplyr::filter(!grepl('Intercept',variable))
       results_append <- rbind(results_append,results)
       
     }
@@ -99,14 +99,16 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
       stop("A coluna de resposta especificada não existe no dataframe.")
   }
   
+
+  
   results_append <- subset(results_append, abs(coef) > 0.005)
   results_append <- results_append %>% 
-    mutate(variable = gsub("_mean",'',variable),
+    dplyr::mutate(variable = gsub("_mean",'',variable),
            ref      = gsub("_mean",'',ref))
   variables_selected <- results_append %>% 
-    group_by(variable) %>% 
+    dplyr::group_by(variable) %>% 
     dplyr::summarise(count = n()) %>% 
-    filter((variable %in% reference_variables & count >= 1) | 
+    dplyr::filter((variable %in% reference_variables & count >= 1) | 
            (variable %in% variables & count >= 2)) %>% 
     ungroup() %>% 
     distinct(variable)
@@ -118,7 +120,7 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
   ## Criando base para calculo dos pesos
   wb <- df %>% 
     ungroup() %>% 
-    select(c(variables_selected[[1]])) %>% 
+    dplyr::select(c(variables_selected[[1]])) %>% 
     tidyr::drop_na()
   
   # Calcular a correla??o
@@ -145,27 +147,27 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
   } else {
     pesos_normalizados <- data.frame(variables_selected) %>% 
       rename(variavel = variable) %>% 
-      mutate(peso = 1/nrow(variables_selected))
+      dplyr::mutate(peso = 1/nrow(variables_selected))
   }
   
   ## Terceira etapa: normalizacao de pesos ----------------
   
-  #group_by = 'name_biome_region_area'
+  #dplyr::group_by = 'name_biome_region_area'
   
-  # Verificar se a variável 'group_by' é NULL
-  if(is.null(group_by)) {
+  # Verificar se a variável 'dplyr::group_by' é NULL
+  if(is.null(dplyr::group_by)) {
     df_input <- df %>% 
-      mutate(group_variable = 'NONE')
+      dplyr::mutate(group_variable = 'NONE')
   } else {
     df_input <- df %>% 
-      rename(group_variable = group_by)
+      rename(group_variable = dplyr::group_by)
   }
   
   ## Transformando variáveis no seu inverso
   # Indicadores cuja lógica é contrária (quanto menos, melhor)
   df_input <- df_input %>% 
-    mutate(across(c(inverse_variables), ~1/(.+1))) %>% 
-    mutate(across(c(inverse_variables), ~ ifelse(is.infinite(.),1,.))) %>% 
+    dplyr::mutate(across(c(inverse_variables), ~1/(.+1))) %>% 
+    dplyr::mutate(across(c(inverse_variables), ~ ifelse(is.infinite(.),1,.))) %>% 
     tidyr::pivot_longer(!c(code_muni,ano,group_variable), names_to = 'variavel', values_to = 'valor') %>%
     inner_join(pesos_normalizados, by = 'variavel')
   
@@ -195,8 +197,8 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
           if(isTRUE(adjust_outliers)){
             
             temp <- temp %>% 
-              group_by(group_variable,ano,variavel) %>% 
-              mutate(
+              dplyr::group_by(group_variable,ano,variavel) %>% 
+              dplyr::mutate(
                 # Substituir outliers pelos limites
                 valor = ifelse(valor < limite_inferior, limite_inferior,
                         ifelse(valor > limite_superior, limite_superior, valor)))
@@ -206,11 +208,11 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
           }
           
           temp <- temp %>% 
-            group_by(group_variable,ano,variavel) %>% 
-            mutate(
+            dplyr::group_by(group_variable,ano,variavel) %>% 
+            dplyr::mutate(
               # Normalizar dados usando min-max
               valor_norm = scales::rescale(valor, to=c(0,1))) %>% 
-            select(code_muni,group_variable,ano,variavel, valor,valor_norm, peso)
+            dplyr::select(code_muni,group_variable,ano,variavel, valor,valor_norm, peso)
           return(temp)
         }
         
@@ -224,8 +226,8 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
 
   
   IBrCRM <- vars %>% 
-    arrange(ano) %>% 
-    group_by(code_muni,group_variable,ano) %>% 
+    dplyr::arrange(ano) %>% 
+    dplyr::group_by(code_muni,group_variable,ano) %>% 
     dplyr::summarise(IBrCRM = sum(valor_norm*peso, na.rm = T))
   
   
@@ -233,13 +235,13 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
   if(standardization_method == 'mean'){
     # Melhorando indicador
     IBrCRM <- IBrCRM %>% 
-      group_by(ano,group_variable) %>% 
-      mutate(IBrCRM = (IBrCRM - mean(IBrCRM, na.rm = T))/mean(IBrCRM, na.rm = T))
+      dplyr::group_by(ano,group_variable) %>% 
+      dplyr::mutate(IBrCRM = (IBrCRM - mean(IBrCRM, na.rm = T))/mean(IBrCRM, na.rm = T))
   } else if(standardization_method == 'discrete'){
     # Melhorando indicador
     IBrCRM <- IBrCRM %>% 
-      group_by(ano,group_variable) %>% 
-      mutate(IBrCRM = ifelse(IBrCRM <= 0.25,'Baixo',
+      dplyr::group_by(ano,group_variable) %>% 
+      dplyr::mutate(IBrCRM = ifelse(IBrCRM <= 0.25,'Baixo',
                       ifelse(between(IBrCRM,0.25,0.5),'Médio-Baixo',
                       ifelse(between(IBrCRM,0.5,0.75),'Médio-Alto',
                       ifelse(IBrCRM >= 0.75,'Alto',NA)))))
@@ -247,9 +249,9 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
 
   }
   
-  if(is.null(group_by)) {
+  if(is.null(dplyr::group_by)) {
     IBrCRM <- IBrCRM %>% ungroup() %>% 
-      select(-c(group_variable))
+      dplyr::select(-c(group_variable))
   } 
   
   options(dplyr.summarise.inform = TRUE)

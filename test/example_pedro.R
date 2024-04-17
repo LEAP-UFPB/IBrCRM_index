@@ -6,6 +6,13 @@ devtools::check(pkg = ".",  cran = FALSE, env_vars = c(NOT_CRAN = "true"))
 remotes::install_github("PedroJorge7/IBrCRM_index")
 
 ## EXEMPLO 
+library(IBrCRMindex)
+library(dplyr)
+library(tidyr)
+library(stats)
+library(scales)
+library(glmnet)
+
 df <- readRDS("./test/df_agregado_bases_inputado.rds")
 
 # Vetor de nomes de variáveis e padrões
