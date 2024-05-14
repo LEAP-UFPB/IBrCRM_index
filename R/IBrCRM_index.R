@@ -152,15 +152,15 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
   
   ## Terceira etapa: normalizacao de pesos ----------------
   
-  #dplyr::group_by = 'name_biome_region_area'
+  #group_by = 'name_biome_region_area'
   
   # Verificar se a variável 'dplyr::group_by' é NULL
-  if(is.null(dplyr::group_by)) {
+  if(is.null(group_by)) {
     df_input <- df %>% 
       dplyr::mutate(group_variable = 'NONE')
   } else {
     df_input <- df %>% 
-      rename(group_variable = dplyr::group_by)
+      rename(group_variable = group_by)
   }
   
   ## Transformando variáveis no seu inverso
