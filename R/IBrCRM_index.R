@@ -40,7 +40,7 @@
 
 
 IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
-                        dplyr::group_by = NULL,adjust_outliers =TRUE, include_weight = TRUE,
+                        group_by = NULL,adjust_outliers =TRUE, include_weight = TRUE,
                         standardization_method = c('mean','discrete','none')) {
   
   options(dplyr.summarise.inform = FALSE)
@@ -241,10 +241,11 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
     # Melhorando indicador
     IBrCRM <- IBrCRM %>% 
       dplyr::group_by(ano,group_variable) %>% 
-      dplyr::mutate(IBrCRM = ifelse(IBrCRM <= 0.25,'Baixo',
-                      ifelse(between(IBrCRM,0.25,0.5),'Médio-Baixo',
-                      ifelse(between(IBrCRM,0.5,0.75),'Médio-Alto',
-                      ifelse(IBrCRM >= 0.75,'Alto',NA)))))
+      dplyr::mutate(IBrCRM_index = ifelse(IBrCRM < 0.2,'Muito baixo',
+                                   ifelse(between(IBrCRM,0.2,0.4),'Baixo',
+                                   ifelse(between(IBrCRM,0.4,0.6),'Médio',
+                                   ifelse(between(IBrCRM,0.6,0.8),'Alto',
+                                   ifelse(IBrCRM > 0.8,'Muito alto',NA))))))
   } else {
 
   }
