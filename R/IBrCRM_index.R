@@ -41,6 +41,7 @@
 
 IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
                         group_by = NULL,adjust_outliers =TRUE, include_weight = TRUE,
+                        param_outlier_adjust = 1,
                         standardization_method = c('mean','discrete','none')) {
   
   options(dplyr.summarise.inform = FALSE)
@@ -191,8 +192,8 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
           IQR <- Q3 - Q1
           
           # Definir limites para identificar outliers
-          limite_inferior <- Q1 - 3 * IQR
-          limite_superior <- Q3 + 3 * IQR
+          limite_inferior <- Q1 - param_outlier_adjust * IQR
+          limite_superior <- Q3 + param_outlier_adjust * IQR
           
           if(isTRUE(adjust_outliers)){
             
@@ -240,7 +241,6 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
   } else if(standardization_method == 'discrete'){
     # Melhorando indicador
     IBrCRM <- IBrCRM %>% 
-      dplyr::group_by(ano,group_variable) %>% 
       dplyr::mutate(IBrCRM_index = ifelse(IBrCRM < 0.2,'Muito baixo',
                                    ifelse(between(IBrCRM,0.2,0.4),'Baixo',
                                    ifelse(between(IBrCRM,0.4,0.6),'Médio',
@@ -250,7 +250,7 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
 
   }
   
-  if(is.null(dplyr::group_by)) {
+  if(is.null(group_by)) {
     IBrCRM <- IBrCRM %>% ungroup() %>% 
       dplyr::select(-c(group_variable))
   } 
