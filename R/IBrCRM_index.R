@@ -42,7 +42,7 @@
 IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
                         group_by = NULL,adjust_outliers =TRUE, include_weight = TRUE,
                         param_outlier_adjust = 3,
-                        standardization_method = c('mean','discrete','none')) {
+                        standardization_method = c('mean','discrete','none','min-max')) {
   
   options(dplyr.summarise.inform = FALSE)
   ## Primeira etapa: Seleção de variáveis ----------------
@@ -238,16 +238,21 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
     IBrCRM <- IBrCRM %>% 
       dplyr::group_by(ano,group_variable) %>% 
       dplyr::mutate(IBrCRM = (IBrCRM - mean(IBrCRM, na.rm = T))/mean(IBrCRM, na.rm = T))
+  } else if(standardization_method == 'min-max'){
+    # Melhorando indicador
+    IBrCRM <- IBrCRM %>% 
+      dplyr::group_by(ano,group_variable) %>% 
+      dplyr::mutate(IBrCRM = scales::rescale(IBrCRM, to=c(0,1)))
   } else if(standardization_method == 'discrete'){
     # Melhorando indicador
     IBrCRM <- IBrCRM %>% 
       dplyr::group_by(ano,group_variable) %>% 
       dplyr::mutate(IBrCRM = scales::rescale(IBrCRM, to=c(0,1)),
-                    IBrCRM_index = ifelse(IBrCRM < 0.2,'Muito baixo',
-                                   ifelse(between(IBrCRM,0.2,0.4),'Baixo',
-                                   ifelse(between(IBrCRM,0.4,0.6),'Médio',
-                                   ifelse(between(IBrCRM,0.6,0.8),'Alto',
-                                   ifelse(IBrCRM > 0.8,'Muito alto',NA))))))
+                    IBrCRM = ifelse(IBrCRM < 0.2,'Muito baixo',
+                             ifelse(between(IBrCRM,0.2,0.4),'Baixo',
+                             ifelse(between(IBrCRM,0.4,0.6),'Médio',
+                             ifelse(between(IBrCRM,0.6,0.8),'Alto',
+                             ifelse(IBrCRM > 0.8,'Muito alto',NA))))))
   } else {
 
   }
