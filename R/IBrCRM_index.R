@@ -248,11 +248,11 @@ IBrCRMindex <- function(df,variables,reference_variables,inverse_variables,
     IBrCRM <- IBrCRM %>% 
       dplyr::group_by(ano,group_variable) %>% 
       dplyr::mutate(IBrCRM = scales::rescale(IBrCRM, to=c(0,1)),
-                    IBrCRM = ifelse(IBrCRM < 0.2,'Muito baixo',
-                             ifelse(between(IBrCRM,0.2,0.4),'Baixo',
-                             ifelse(between(IBrCRM,0.4,0.6),'Médio',
-                             ifelse(between(IBrCRM,0.6,0.8),'Alto',
-                             ifelse(IBrCRM > 0.8,'Muito alto',NA))))))
+                    IBrCRM_index = ifelse(IBrCRM < 0.2,'Muito baixo',
+                                   ifelse(between(IBrCRM,0.2,0.4),'Baixo',
+                                   ifelse(between(IBrCRM,0.4,0.6),'Médio',
+                                   ifelse(between(IBrCRM,0.6,0.8),'Alto',
+                                   ifelse(IBrCRM > 0.8,'Muito alto',NA))))))
   } else {
 
   }
