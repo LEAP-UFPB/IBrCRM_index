@@ -15,7 +15,7 @@
 #' @param cfa_estimator estimador do lavaan (ex.: 'ML')
 #' @param target_variable (opcional) target para Boruta. Se NULL, usa PC1 das candidatas.
 #'
-#' @return data.frame com IBrCRM e atributos (selected_variables, weights, boruta_result)
+#' @return data.frame com IBrCRM e atributos (selected_variables, weights, boruta_result, selection_report)
 #' @export
 IBrCRMindex <- function(df, variables, inverse_variables = NULL,
                         group_by = NULL, adjust_outliers = TRUE,
@@ -29,6 +29,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   stopifnot(requireNamespace("Boruta", quietly = TRUE))
   stopifnot(requireNamespace("lavaan", quietly = TRUE))
   stopifnot(requireNamespace("scales", quietly = TRUE))
+  stopifnot(requireNamespace("tibble", quietly = TRUE))
 
   standardization_method <- standardization_method[1]
 
@@ -126,6 +127,30 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   }
 
   # -------------------------------
+  # RELATÓRIO: SELEÇÃO DE VARIÁVEIS (n, quais, %)
+  # -------------------------------
+  cand_in <- unique(variables)
+  cand_in_df <- intersect(cand_in, names(df))
+  cand_valid <- available_vars  # pós filtros (NA e variância)
+
+  selection_report <- list(
+    counts = tibble::tibble(
+      universe = c("input_candidates", "candidates_in_df", "valid_after_filters"),
+      n_total = c(length(cand_in), length(cand_in_df), length(cand_valid)),
+      n_selected = c(length(selected_vars), length(selected_vars), length(selected_vars)),
+      pct_selected = c(
+        ifelse(length(cand_in) == 0, NA_real_, 100 * length(selected_vars) / length(cand_in)),
+        ifelse(length(cand_in_df) == 0, NA_real_, 100 * length(selected_vars) / length(cand_in_df)),
+        ifelse(length(cand_valid) == 0, NA_real_, 100 * length(selected_vars) / length(cand_valid))
+      )
+    ),
+    selected_variables = selected_vars,
+    not_selected_valid = setdiff(cand_valid, selected_vars),
+    dropped_hi_na = drop_hi_na,
+    dropped_zero_variance = drop_zero
+  )
+
+  # -------------------------------
   # ETAPA 3: PESOS VIA CFA
   # -------------------------------
   df_cfa <- df_analysis |>
@@ -203,9 +228,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
 
   if (isTRUE(adjust_outliers)) {
     long <- long |>
-      dplyr::mutate(
-        valor = pmin(pmax(.data$valor, .data$lo), .data$hi)
-      )
+      dplyr::mutate(valor = pmin(pmax(.data$valor, .data$lo), .data$hi))
   }
 
   long <- long |>
@@ -261,6 +284,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   attr(IBrCRM, "selected_variables") <- selected_vars
   attr(IBrCRM, "weights") <- pesos_normalizados
   attr(IBrCRM, "boruta_result") <- boruta_result
+  attr(IBrCRM, "selection_report") <- selection_report
 
   IBrCRM
 }
@@ -275,8 +299,19 @@ get_index_info <- function(index_result) {
   list(
     selected_variables = attr(index_result, "selected_variables"),
     weights = attr(index_result, "weights"),
-    n_variables = length(attr(index_result, "selected_variables"))
+    n_variables = length(attr(index_result, "selected_variables")),
+    selection_report = attr(index_result, "selection_report")
   )
+}
+
+# opcional: imprime resumo bonitinho
+print_selection_report <- function(index_result) {
+  rep <- attr(index_result, "selection_report")
+  if (is.null(rep)) stop("selection_report não encontrado nos atributos.")
+  print(rep$counts)
+  cat("\nSelected variables:\n")
+  print(rep$selected_variables)
+  invisible(rep)
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
