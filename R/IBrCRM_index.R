@@ -1,3 +1,6 @@
+# helpers (curtos, sem firula)
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
 #' Índice Brasileiro de Competitividade Regional Municipal (IBrCRM) - Versão Boruta
 #'
 #' Seleciona variáveis via Boruta, calcula pesos via CFA (lavaan),
@@ -14,6 +17,9 @@
 #' @param boruta_pValue pValue do Boruta
 #' @param cfa_estimator estimador do lavaan (ex.: 'ML')
 #' @param target_variable (opcional) target para Boruta. Se NULL, usa PC1 das candidatas.
+#' @param verbose se TRUE, imprime log da seleção
+#' @param log_fun função de log (ex.: message, cat, function(x) writeLines(x))
+#' @param log_prefix prefixo do log
 #'
 #' @return data.frame com IBrCRM e atributos (selected_variables, weights, boruta_result, selection_report)
 #' @export
@@ -22,7 +28,8 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
                         param_outlier_adjust = 3,
                         standardization_method = c("mean","discrete","none","min-max"),
                         boruta_maxRuns = 100, boruta_pValue = 0.01,
-                        cfa_estimator = "ML", target_variable = NULL) {
+                        cfa_estimator = "ML", target_variable = NULL,
+                        verbose = TRUE, log_fun = message, log_prefix = "IBrCRMindex") {
 
   stopifnot(requireNamespace("dplyr", quietly = TRUE))
   stopifnot(requireNamespace("tidyr", quietly = TRUE))
@@ -32,6 +39,13 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   stopifnot(requireNamespace("tibble", quietly = TRUE))
 
   standardization_method <- standardization_method[1]
+
+  # logger interno
+  .log <- function(...) {
+    if (isTRUE(verbose)) {
+      log_fun(paste0(log_prefix, " | ", sprintf(...)))
+    }
+  }
 
   # -------------------------------
   # ETAPA 1: PREPARAÇÃO DOS DADOS
@@ -148,6 +162,39 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
     not_selected_valid = setdiff(cand_valid, selected_vars),
     dropped_hi_na = drop_hi_na,
     dropped_zero_variance = drop_zero
+  )
+
+  # --- LOG (n, %, quais) ---
+  pct_valid <- selection_report$counts$pct_selected[
+    selection_report$counts$universe == "valid_after_filters"
+  ]
+  if (length(pct_valid) == 0) pct_valid <- NA_real_
+
+  .log("Selecionadas %d/%d (%.1f%%) após filtros.",
+       length(selected_vars), length(cand_valid), pct_valid)
+
+  .log("Universos: input=%d | in_df=%d | valid=%d",
+       length(cand_in), length(cand_in_df), length(cand_valid))
+
+  .log("Variáveis selecionadas: %s", paste(selected_vars, collapse = ", "))
+
+  if (length(drop_hi_na) > 0)
+    .log("Descartadas (>80%% NA): %s", paste(drop_hi_na, collapse = ", "))
+
+  if (length(drop_zero) > 0)
+    .log("Descartadas (variância ~0): %s", paste(drop_zero, collapse = ", "))
+
+  # opcional: guardar log text no report (útil pra salvar em arquivo depois)
+  selection_report$log_text <- paste(
+    paste0("Selecionadas ", length(selected_vars), "/", length(cand_valid),
+           " (", sprintf("%.1f", pct_valid), "%) após filtros."),
+    paste0("Universos: input=", length(cand_in),
+           " | in_df=", length(cand_in_df),
+           " | valid=", length(cand_valid)),
+    paste0("Selecionadas: ", paste(selected_vars, collapse = ", ")),
+    if (length(drop_hi_na) > 0) paste0("Drop >80% NA: ", paste(drop_hi_na, collapse = ", ")) else NULL,
+    if (length(drop_zero) > 0) paste0("Drop var~0: ", paste(drop_zero, collapse = ", ")) else NULL,
+    sep = "\n"
   )
 
   # -------------------------------
@@ -289,7 +336,6 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   IBrCRM
 }
 
-# helpers (curtos, sem firula)
 plot_boruta_results <- function(boruta_result) {
   stopifnot(requireNamespace("Boruta", quietly = TRUE))
   plot(boruta_result, las = 2, cex.axis = 0.7)
@@ -313,5 +359,3 @@ print_selection_report <- function(index_result) {
   print(rep$selected_variables)
   invisible(rep)
 }
-
-`%||%` <- function(a, b) if (is.null(a)) b else a
