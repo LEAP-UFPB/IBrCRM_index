@@ -2,9 +2,7 @@
 
 ## 1. Visão Geral
 
-O projeto `IBrCRM_index` é um pacote R chamado `IBrCRMindex`, cujo objetivo é calcular o **Índice Brasileiro de Competitividade Regional Municipal (IBrCRM)**. O índice seleciona as variáveis mais relevantes de um conjunto candidato, atribui pesos a cada uma e normaliza os dados para permitir comparações justas entre municípios e ao longo do tempo.
-
-O pacote foi desenvolvido por pesquisadores da **Universidade Federal da Paraíba (UFPB)** e do **Laboratório de Economia e Avaliação de Políticas Públicas (LEAP)**. A UFPB consta no `DESCRIPTION` como detentora dos direitos (`cph`) e financiadora (`fnd`).
+O `IBrCRM_index` é um pacote R chamado `IBrCRMindex` que calcula o **Índice Brasileiro de Competitividade Regional Municipal (IBrCRM)**. O índice seleciona as variáveis mais relevantes de um conjunto candidato, atribui pesos a cada uma e normaliza os dados para permitir comparações entre municípios e ao longo do tempo. Foi desenvolvido por pesquisadores da **Universidade Federal da Paraíba (UFPB)** e do **Laboratório de Economia e Avaliação de Políticas Públicas (LEAP)**.
 
 ## 2. Estrutura do Projeto
 
@@ -12,7 +10,7 @@ O projeto segue a estrutura padrão de um pacote R:
 
 | Caminho | Descrição |
 | ------- | --------- |
-| `R/IBrCRM_index.R` | Código-fonte da função principal `IBrCRMindex()` e da auxiliar `plot_boruta_results()`. |
+| `R/IBrCRM_index.R` | Código-fonte da função principal `IBrCRMindex()` e das auxiliares `plot_boruta_results()`, `get_index_info()` e `print_selection_report()`. |
 | `man/IBrCRMindex.Rd` | Documentação da função no formato R documentation (Rd), gerada via roxygen2. |
 | `DESCRIPTION` | Metadados do pacote: nome, versão, autores, descrição, licença e dependências. |
 | `NAMESPACE` | Funções exportadas e importadas de outros pacotes. |
@@ -23,19 +21,18 @@ O projeto segue a estrutura padrão de um pacote R:
 
 ## 3. Funcionalidade Principal: `IBrCRMindex()`
 
-A função `IBrCRMindex()` é o núcleo do pacote. A versão atual do código implementa a **"Versão Boruta"**: seleciona variáveis via **Boruta** e calcula os pesos via **Análise Fatorial Confirmatória (CFA)** com `lavaan`. O processo tem as seguintes etapas:
+A função `IBrCRMindex()` é o núcleo do pacote (Versão Boruta): seleciona variáveis via **Boruta** e calcula os pesos via **Análise Fatorial Confirmatória (CFA)** com `lavaan`. O processo tem as seguintes etapas:
 
-1. **Preparação e limpeza dos dados.** Mantém `code_muni`, `ano` e as variáveis candidatas presentes na base; descarta variáveis com mais de 80% de valores ausentes e variáveis com variância próxima de zero.
-2. **Seleção de variáveis (Boruta).** Aplica imputação simples pela mediana apenas para rodar o algoritmo. Por padrão, o alvo (`target`) é o primeiro componente principal (PC1) das candidatas, obtido por `prcomp`; alternativamente, aceita um `target_variable` informado ou usa a média por linha como fallback. Após o Boruta, aplica `TentativeRoughFix` e extrai os atributos confirmados, com um teto de `max(5, floor(0.5 * p))` variáveis selecionadas.
-3. **Geração de pesos (CFA).** Ajusta um modelo fatorial de fator único (`fator =~ v1 + v2 + ...`) sobre as variáveis selecionadas e padronizadas, usando `lavaan::cfa` com o estimador definido em `cfa_estimator`. As cargas fatoriais padronizadas viram os pesos. O ajuste ocorre quando há pelo menos 50 observações e 2 variáveis selecionadas.
-4. **Normalização.** Normaliza as variáveis para uma escala comum dentro de cada grupo de `ano × group_by`, com ajuste de outliers baseado no IQR (multiplicador definido por `param_outlier_adjust`, padrão 3). Variáveis listadas em `inverse_variables` são invertidas antes da agregação (casos em que valores menores indicam melhor desempenho, como taxa de mortalidade).
-5. **Cálculo e padronização final.** Agrega as variáveis normalizadas e ponderadas no IBrCRM por município e ano. O índice final pode ser padronizado (`mean`, `min-max`, `discrete`, `none`) e categorizado em níveis (Muito Baixo, Baixo, Médio, Alto, Muito Alto).
+1. **Preparação e limpeza dos dados.** Exige as colunas `code_muni` e `ano`. Mantém as variáveis candidatas presentes na base e descarta as que têm mais de 80% de valores ausentes e as com variância próxima de zero.
+2. **Seleção de variáveis (Boruta).** Aplica imputação pela mediana apenas para rodar o algoritmo. Por padrão, o alvo é o primeiro componente principal (PC1) das candidatas, obtido por `prcomp`; alternativamente, aceita um `target_variable` informado ou usa a média por linha como fallback. Com `set.seed(42)`, roda o Boruta, aplica `TentativeRoughFix` e extrai os atributos confirmados — recorrendo aos tentativos, e depois às primeiras variáveis, caso nada seja confirmado. Aplica um teto de `max(5, floor(0.5 * p))` variáveis, ordenando pela importância média (`meanImp`).
+3. **Geração de pesos (CFA).** Usa pesos uniformes (`1/k`) por padrão. Quando há pelo menos 50 observações e 2 variáveis selecionadas, ajusta um modelo fatorial de fator único (`fator =~ v1 + v2 + ...`) sobre as variáveis padronizadas, com `lavaan::cfa` (`std.lv = TRUE`, `missing = "fiml"`, estimador definido por `cfa_estimator`). Os pesos são as cargas fatoriais padronizadas, tomadas em módulo e normalizadas para somar 1.
+4. **Normalização.** Para cada grupo de `group_by × ano × variável`, inverte o sinal das variáveis listadas em `inverse_variables`, aplica o ajuste de outliers por IQR (limites em `q1 - k·IQR` e `q3 + k·IQR`, com `k = param_outlier_adjust`) quando `adjust_outliers = TRUE`, e reescala os valores para o intervalo de 0 a 1.
+5. **Cálculo do índice.** Agrega as variáveis como soma ponderada dos valores normalizados por município, grupo e ano.
+6. **Padronização final.** Conforme `standardization_method`: `mean` (desvio relativo à média do grupo), `min-max` (reescala de 0 a 1), `discrete` (reescala de 0 a 1 e categorização em Muito baixo, Baixo, Médio, Alto e Muito alto) ou `none`.
 
-O retorno é um `data.frame` com o IBrCRM e atributos úteis para auditoria: `selected_variables`, `weights`, `boruta_result` e `selection_report`. A função auxiliar `plot_boruta_results()` gera o gráfico de importância do Boruta.
+O retorno é um `data.frame` com o IBrCRM e os atributos `selected_variables`, `weights`, `boruta_result` e `selection_report`. O `selection_report` registra as contagens e percentuais de seleção, as variáveis selecionadas, as descartadas (por NA e por variância) e um log em texto.
 
 ### Parâmetros da Função
-
-Assinatura atual (`R/IBrCRM_index.R`):
 
 - `df`: `data.frame` de entrada; exige as colunas `code_muni` e `ano`.
 - `variables`: vetor com os nomes das variáveis candidatas.
@@ -52,10 +49,14 @@ Assinatura atual (`R/IBrCRM_index.R`):
 
 ## 4. Dependências
 
-Pelo código-fonte, a função exige em tempo de execução (`requireNamespace`): `dplyr`, `tidyr`, `Boruta`, `lavaan`, `scales` e `tibble`, além de `stats` (`prcomp`, `var`).
+Em tempo de execução, a função exige `dplyr`, `tidyr`, `Boruta`, `lavaan`, `scales` e `tibble`, além de `stats` (`prcomp`, `var`, `quantile`).
 
-> **Observação:** o arquivo `DESCRIPTION` está desatualizado em relação ao código. Ele ainda importa `glmnet` (resquício da versão antiga com Elastic Net + PCA) e não declara `Boruta`, `lavaan` nem `tibble`. Vale alinhar o campo `Imports` do `DESCRIPTION` com as dependências reais da Versão Boruta.
+## 5. Funções Auxiliares
 
-## 5. Dados de Teste
+- `plot_boruta_results()`: gera o gráfico de importância das variáveis do Boruta.
+- `get_index_info()`: retorna as variáveis selecionadas, os pesos, o número de variáveis e o `selection_report`.
+- `print_selection_report()`: imprime as contagens de seleção e a lista de variáveis selecionadas.
+
+## 6. Dados de Teste
 
 O diretório `test/` contém o arquivo de exemplo `df_agregado_bases_inputado.rds` (15 MB), um `data.frame` salvo em formato R. O script `example_pedro.R` demonstra como carregar esses dados e usar `IBrCRMindex()` para calcular um subíndice, agrupando por bioma e região.
