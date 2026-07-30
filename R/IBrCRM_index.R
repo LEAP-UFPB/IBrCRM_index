@@ -20,6 +20,10 @@
 #' @param verbose se TRUE, imprime log da seleção
 #' @param log_fun função de log (ex.: message, cat, function(x) writeLines(x))
 #' @param log_prefix prefixo do log
+#' @param cfa_fallback comportamento quando a CFA falha: \code{"error"} ou
+#'   \code{"uniform"}
+#' @param audit_log_path caminho opcional do CSV persistente de auditoria
+#' @param subindex_name nome do subíndice gravado no log
 #'
 #' @return data.frame com IBrCRM e atributos (selected_variables, weights, boruta_result, selection_report)
 #' @export
@@ -29,7 +33,11 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
                         standardization_method = c("mean","discrete","none","min-max"),
                         boruta_maxRuns = 100, boruta_pValue = 0.01,
                         cfa_estimator = "ML", target_variable = NULL,
-                        verbose = TRUE, log_fun = message, log_prefix = "IBrCRMindex") {
+                        verbose = TRUE, log_fun = message, log_prefix = "IBrCRMindex",
+                        cfa_fallback = c("error", "uniform"),
+                        audit_log_path = NULL, subindex_name = NULL) {
+
+  cfa_fallback <- match.arg(cfa_fallback)
 
   stopifnot(requireNamespace("dplyr", quietly = TRUE))
   stopifnot(requireNamespace("tidyr", quietly = TRUE))
@@ -77,7 +85,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
 
   # remove variáveis com variância ~0 (usando tudo disponível)
   var_ok <- vapply(df_analysis[available_vars], function(x) stats::var(x, na.rm = TRUE), numeric(1))
-  drop_zero <- names(var_ok)[is.na(var_ok) | var_ok < 1e-10]
+  drop_zero <- names(var_ok)[!is.finite(var_ok) | var_ok <= 0]
   available_vars <- setdiff(available_vars, drop_zero)
   if (length(available_vars) < 2) stop("Após remover variância ~0, sobraram <2 variáveis.")
 
@@ -131,14 +139,6 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
     selected_vars <- setdiff(selected_vars, "target_pca")
   }
   if (length(selected_vars) == 0) selected_vars <- available_vars[1:min(5, length(available_vars))]
-
-  p <- length(available_vars)
-  max_keep <- max(5, floor(0.5 * p))  # <= ajuste do boruta (cap)
-  if (length(selected_vars) > max_keep) {
-    imp <- Boruta::attStats(boruta_result)
-    imp <- imp[intersect(rownames(imp), selected_vars), , drop = FALSE]
-    selected_vars <- rownames(imp)[order(imp$meanImp, decreasing = TRUE)][1:max_keep]
-  }
 
   # -------------------------------
   # RELATÓRIO: SELEÇÃO DE VARIÁVEIS (n, quais, %)
@@ -209,6 +209,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
     variavel = selected_vars,
     peso = 1 / length(selected_vars)
   )
+  cfa_completed <- FALSE
 
   if (nrow(df_cfa) >= 50 && length(selected_vars) >= 2) {
     modelo_cfa <- paste0("fator =~ ", paste(selected_vars, collapse = " + "))
@@ -230,10 +231,23 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
         dplyr::mutate(peso = abs(.data$std) / sum(abs(.data$std))) |>
         dplyr::select(.data$variavel, .data$peso)
 
+      if (nrow(pe) != length(selected_vars) ||
+          any(!is.finite(pe$peso)) ||
+          !isTRUE(all.equal(sum(pe$peso), 1, tolerance = 1e-12))) {
+        stop("CFA retornou pesos invalidos")
+      }
+      cfa_completed <- TRUE
       as.data.frame(pe)
     }, error = function(e) {
       pesos_normalizados
     })
+  }
+
+  if (!cfa_completed && identical(cfa_fallback, "error")) {
+    stop(
+      "A CFA nao produziu pesos validos. Use cfa_fallback = 'uniform' apenas se pesos iguais forem intencionais.",
+      call. = FALSE
+    )
   }
 
   # -------------------------------
@@ -332,6 +346,70 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   attr(IBrCRM, "weights") <- pesos_normalizados
   attr(IBrCRM, "boruta_result") <- boruta_result
   attr(IBrCRM, "selection_report") <- selection_report
+  attr(IBrCRM, "cfa_status") <- if (cfa_completed) "success" else "fallback_uniform"
+
+  if (!is.null(audit_log_path)) {
+    if (length(audit_log_path) != 1L || is.na(audit_log_path) ||
+        !nzchar(audit_log_path)) {
+      stop("audit_log_path deve ser um caminho unico e nao vazio.")
+    }
+
+    audit_dir <- dirname(audit_log_path)
+    dir.create(audit_dir, recursive = TRUE, showWarnings = FALSE)
+    audit_subindex <- if (is.null(subindex_name) || !nzchar(subindex_name)) {
+      "indice"
+    } else {
+      as.character(subindex_name)[1]
+    }
+
+    audit_current <- data.frame(
+      subindicador = audit_subindex,
+      variavel = as.character(pesos_normalizados$variavel),
+      peso = as.numeric(pesos_normalizados$peso),
+      selecionada_boruta = TRUE,
+      cfa_status = attr(IBrCRM, "cfa_status"),
+      package_version = as.character(utils::packageVersion("IBrCRMindex")),
+      stringsAsFactors = FALSE
+    )
+
+    audit_existing <- if (file.exists(audit_log_path)) {
+      tryCatch(
+        utils::read.csv2(audit_log_path, stringsAsFactors = FALSE),
+        error = function(e) {
+          stop("Nao foi possivel ler o log de auditoria existente: ", conditionMessage(e))
+        }
+      )
+    } else {
+      audit_current[0, , drop = FALSE]
+    }
+
+    required_audit_cols <- names(audit_current)
+    if (!all(required_audit_cols %in% names(audit_existing))) {
+      stop("O log de auditoria existente possui esquema incompativel.")
+    }
+    audit_existing <- audit_existing[
+      audit_existing$subindicador != audit_subindex,
+      required_audit_cols,
+      drop = FALSE
+    ]
+    audit_combined <- rbind(audit_existing, audit_current)
+    audit_combined <- audit_combined[
+      order(audit_combined$subindicador, audit_combined$variavel),
+      ,
+      drop = FALSE
+    ]
+
+    audit_tmp <- tempfile(
+      pattern = "ibrcrm_audit_",
+      tmpdir = audit_dir,
+      fileext = ".csv"
+    )
+    on.exit(unlink(audit_tmp), add = TRUE)
+    utils::write.csv2(audit_combined, audit_tmp, row.names = FALSE)
+    if (!file.copy(audit_tmp, audit_log_path, overwrite = TRUE)) {
+      stop("Nao foi possivel atualizar o log de auditoria: ", audit_log_path)
+    }
+  }
 
   IBrCRM
 }
@@ -345,6 +423,7 @@ get_index_info <- function(index_result) {
   list(
     selected_variables = attr(index_result, "selected_variables"),
     weights = attr(index_result, "weights"),
+    cfa_status = attr(index_result, "cfa_status"),
     n_variables = length(attr(index_result, "selected_variables")),
     selection_report = attr(index_result, "selection_report")
   )
