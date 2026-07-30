@@ -35,13 +35,15 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
                         param_outlier_adjust = 3,
                         standardization_method = c('mean','discrete','none','min-max'),
                         boruta_maxRuns = 100, boruta_pValue = 0.01,
-                        cfa_estimator = 'ML', target_variable = NULL) {
+                        cfa_estimator = 'ML', target_variable = NULL,
+                        cfa_fallback = c("error", "uniform")) {
+  cfa_fallback <- match.arg(cfa_fallback)
   
   # Carrega pacotes necessários
-  if (!require(Boruta, quietly = TRUE)) {
+  if (!requireNamespace("Boruta", quietly = TRUE)) {
     stop("Pacote 'Boruta' não encontrado. Instale com: install.packages('Boruta')")
   }
-  if (!require(lavaan, quietly = TRUE)) {
+  if (!requireNamespace("lavaan", quietly = TRUE)) {
     stop("Pacote 'lavaan' não encontrado. Instale com: install.packages('lavaan')")
   }
   
@@ -104,15 +106,17 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   cat("Etapa 2: Executando seleção de variáveis com Boruta...\n")
   
   # Prepara dados para Boruta (média por ano para reduzir dimensionalidade)
+  # Mantem as observacoes municipais. Agregar previamente por ano reduz o
+  # painel inteiro a poucas linhas e pode alterar radicalmente a selecao.
   df_boruta <- df_analysis %>%
-    dplyr::group_by(ano) %>%
-    dplyr::summarise(across(all_of(available_vars), ~ mean(., na.rm = TRUE)), .groups = 'drop') %>%
-    dplyr::select(-ano) %>%
+    dplyr::select(all_of(available_vars)) %>%
     tidyr::drop_na()
   
   # Remove variáveis com variância zero ou muito baixa
-  var_check <- sapply(df_boruta, function(x) var(x, na.rm = TRUE))
-  zero_var_cols <- names(var_check[var_check == 0 | is.na(var_check) | var_check < 1e-10])
+  # A escala da variavel nao deve determinar se ela possui variancia. O limite
+  # absoluto 1e-10 eliminava proporcoes validas antes da padronizacao.
+  var_check <- vapply(df_boruta, function(x) stats::var(x, na.rm = TRUE), numeric(1))
+  zero_var_cols <- names(var_check[!is.finite(var_check) | var_check <= 0])
   
   if (length(zero_var_cols) > 0) {
     cat("  - Removendo variáveis com variância zero:", paste(zero_var_cols, collapse = ", "), "\n")
@@ -201,6 +205,8 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   df_cfa <- df_analysis %>%
     dplyr::select(all_of(selected_vars)) %>%
     tidyr::drop_na()
+
+  cfa_completed <- FALSE
   
   if (nrow(df_cfa) < 50) {
     warning("Poucos dados para CFA. Usando distribuição uniforme de pesos.")
@@ -234,6 +240,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
         pesos_normalizados <- pesos_cfa %>%
           dplyr::mutate(peso = abs(std.all) / sum(abs(std.all))) %>%
           dplyr::select(variavel = rhs, peso)
+        cfa_completed <- TRUE
         
         cat("  - Pesos calculados com sucesso via CFA\n")
       } else {
@@ -260,6 +267,13 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   cat("Etapa 4: Normalizando variáveis...\n")
   
   # Se não houver agrupamento, define grupo fictício
+  if (!cfa_completed && identical(cfa_fallback, "error")) {
+    stop(
+      "A CFA nao produziu pesos validos. A execucao foi interrompida para evitar pesos uniformes silenciosos. Use cfa_fallback = 'uniform' apenas se esse comportamento for intencional.",
+      call. = FALSE
+    )
+  }
+
   if (is.null(group_by)) {
     df_input <- df %>%
       dplyr::mutate(group_variable = 'NONE')
@@ -386,6 +400,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   attr(IBrCRM, "selected_variables") <- selected_vars
   attr(IBrCRM, "weights") <- pesos_normalizados
   attr(IBrCRM, "boruta_result") <- boruta_result
+  attr(IBrCRM, "cfa_status") <- if (cfa_completed) "success" else "fallback_uniform"
   
   cat("=== PROCESSO CONCLUÍDO COM SUCESSO ===\n")
   cat(paste("Variáveis finais utilizadas:", length(selected_vars), "\n"))
@@ -396,7 +411,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
 
 # Função auxiliar para visualizar resultados do Boruta
 plot_boruta_results <- function(boruta_result) {
-  if (!require(Boruta, quietly = TRUE)) {
+  if (!requireNamespace("Boruta", quietly = TRUE)) {
     stop("Pacote 'Boruta' necessário para plotar resultados.")
   }
   plot(boruta_result, las = 2, cex.axis = 0.7, 
@@ -408,6 +423,7 @@ get_index_info <- function(index_result) {
   list(
     selected_variables = attr(index_result, "selected_variables"),
     weights = attr(index_result, "weights"),
+    cfa_status = attr(index_result, "cfa_status"),
     n_variables = length(attr(index_result, "selected_variables"))
   )
 }

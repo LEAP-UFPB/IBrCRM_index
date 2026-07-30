@@ -1,0 +1,12 @@
+utils::globalVariables(c(
+  "ano",
+  "code_muni",
+  "group_variable",
+  "op",
+  "peso",
+  "rhs",
+  "std.all",
+  "valor",
+  "valor_norm",
+  "variavel"
+))
