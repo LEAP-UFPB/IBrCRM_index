@@ -205,6 +205,67 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
     dplyr::mutate(dplyr::across(dplyr::everything(), ~ suppressWarnings(as.numeric(.x)))) |>
     tidyr::drop_na()
 
+  # A CFA fica singular quando recebe duas medidas exatamente redundantes.
+  # Mantemos, de forma deterministica, a variavel de maior importancia no
+  # Boruta (desempate alfabetico) e registramos as demais como descartadas.
+  dropped_perfect_correlation <- character(0)
+  if (nrow(df_cfa) > 1 && length(selected_vars) >= 2) {
+    boruta_stats <- Boruta::attStats(boruta_result)
+    importance <- stats::setNames(boruta_stats$meanImp, rownames(boruta_stats))
+    priority <- selected_vars[
+      order(-importance[selected_vars], selected_vars, na.last = TRUE)
+    ]
+    cor_cfa <- stats::cor(df_cfa, use = "pairwise.complete.obs")
+    kept <- character(0)
+
+    for (candidate in priority) {
+      is_redundant <- length(kept) > 0 &&
+        any(abs(cor_cfa[candidate, kept]) >= (1 - 1e-10), na.rm = TRUE)
+      if (is_redundant) {
+        dropped_perfect_correlation <- c(
+          dropped_perfect_correlation,
+          candidate
+        )
+      } else {
+        kept <- c(kept, candidate)
+      }
+    }
+
+    selected_vars <- selected_vars[selected_vars %in% kept]
+    df_cfa <- df_cfa[, selected_vars, drop = FALSE]
+  }
+
+  selection_report$dropped_perfect_correlation <- dropped_perfect_correlation
+  selection_report$selected_variables <- selected_vars
+  selection_report$not_selected_valid <- setdiff(cand_valid, selected_vars)
+  selection_report$counts$n_selected <- length(selected_vars)
+  selection_report$counts$pct_selected <- ifelse(
+    selection_report$counts$n_total == 0,
+    NA_real_,
+    100 * length(selected_vars) / selection_report$counts$n_total
+  )
+  if (length(dropped_perfect_correlation) > 0) {
+    .log(
+      "Descartadas (correlacao perfeita; mantida maior importancia Boruta): %s",
+      paste(dropped_perfect_correlation, collapse = ", ")
+    )
+    selection_report$log_text <- paste(
+      selection_report$log_text,
+      paste0(
+        "Drop correlacao perfeita: ",
+        paste(dropped_perfect_correlation, collapse = ", ")
+      ),
+      sep = "\n"
+    )
+  }
+
+  if (length(selected_vars) < 2) {
+    stop(
+      "Menos de duas variaveis nao redundantes permaneceram para a CFA.",
+      call. = FALSE
+    )
+  }
+
   pesos_normalizados <- data.frame(
     variavel = selected_vars,
     peso = 1 / length(selected_vars)

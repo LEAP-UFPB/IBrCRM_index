@@ -1,7 +1,7 @@
 Type: Package
 Package: IBrCRMindex
 Title: Indice Brasileiro de Competitividade Regional Municipal (IBrCRM)
-Version: 0.2.1
+Version: 0.2.2
 Author: Pedro Jorge [aut, cre], Hyolitta Araujo [aut], Pierre Hitalo [aut],
     Wallace Souza [aut], Jevuks Araujo [aut], UFPB [cph, fnd]
 Authors@R: c(
