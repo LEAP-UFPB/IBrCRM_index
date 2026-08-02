@@ -12,6 +12,7 @@ IBrCRMindex(
   standardization_method = c("mean", "discrete", "none", "min-max"),
   boruta_maxRuns = 100,
   boruta_pValue = 0.01,
+  boruta_max_selected = NULL,
   cfa_estimator = "ML",
   target_variable = NULL,
   verbose = TRUE,
@@ -34,6 +35,9 @@ interquartil.}
 \item{standardization_method}{Método final de padronização.}
 \item{boruta_maxRuns}{Número máximo de execuções do Boruta.}
 \item{boruta_pValue}{Nível de significância do Boruta.}
+\item{boruta_max_selected}{Limite de variaveis confirmadas pelo Boruta que
+seguem para a CFA. Mantem as maiores importancias medias, com desempate pelo
+nome. Use \code{NULL} para nao aplicar limite.}
 \item{cfa_estimator}{Estimador passado para \code{lavaan::cfa()}.}
 \item{target_variable}{Target opcional do Boruta. Se \code{NULL}, usa PC1.}
 \item{verbose}{Se \code{TRUE}, imprime mensagens de progresso.}

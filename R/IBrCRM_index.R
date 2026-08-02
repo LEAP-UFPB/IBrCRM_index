@@ -15,6 +15,10 @@
 #' @param standardization_method 'mean','discrete','none','min-max'
 #' @param boruta_maxRuns máximo de iterações do Boruta
 #' @param boruta_pValue pValue do Boruta
+#' @param boruta_max_selected número máximo de variáveis confirmadas pelo
+#'   Boruta que seguem para a CFA. Se houver mais confirmações, conserva as
+#'   maiores importâncias médias, com desempate pelo nome. Use \code{NULL}
+#'   para não aplicar limite.
 #' @param cfa_estimator estimador do lavaan (ex.: 'ML')
 #' @param target_variable (opcional) target para Boruta. Se NULL, usa PC1 das candidatas.
 #' @param verbose se TRUE, imprime log da seleção
@@ -32,12 +36,23 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
                         param_outlier_adjust = 3,
                         standardization_method = c("mean","discrete","none","min-max"),
                         boruta_maxRuns = 100, boruta_pValue = 0.01,
+                        boruta_max_selected = NULL,
                         cfa_estimator = "ML", target_variable = NULL,
                         verbose = TRUE, log_fun = message, log_prefix = "IBrCRMindex",
                         cfa_fallback = c("error", "uniform"),
                         audit_log_path = NULL, subindex_name = NULL) {
 
   cfa_fallback <- match.arg(cfa_fallback)
+  if (!is.null(boruta_max_selected)) {
+    if (length(boruta_max_selected) != 1L ||
+        is.na(boruta_max_selected) ||
+        !is.finite(boruta_max_selected) ||
+        boruta_max_selected < 2 ||
+        boruta_max_selected != as.integer(boruta_max_selected)) {
+      stop("boruta_max_selected deve ser NULL ou um inteiro maior ou igual a 2.")
+    }
+    boruta_max_selected <- as.integer(boruta_max_selected)
+  }
 
   stopifnot(requireNamespace("dplyr", quietly = TRUE))
   stopifnot(requireNamespace("tidyr", quietly = TRUE))
@@ -140,6 +155,22 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   }
   if (length(selected_vars) == 0) selected_vars <- available_vars[1:min(5, length(available_vars))]
 
+  boruta_confirmed_variables <- selected_vars
+  dropped_max_selected <- character(0)
+  if (!is.null(boruta_max_selected) &&
+      length(selected_vars) > boruta_max_selected) {
+    boruta_stats <- Boruta::attStats(boruta_result)
+    importance <- stats::setNames(
+      boruta_stats$meanImp,
+      rownames(boruta_stats)
+    )
+    priority <- selected_vars[
+      order(-importance[selected_vars], selected_vars, na.last = TRUE)
+    ]
+    dropped_max_selected <- priority[-seq_len(boruta_max_selected)]
+    selected_vars <- priority[seq_len(boruta_max_selected)]
+  }
+
   # -------------------------------
   # RELATÓRIO: SELEÇÃO DE VARIÁVEIS (n, quais, %)
   # -------------------------------
@@ -159,9 +190,12 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
       )
     ),
     selected_variables = selected_vars,
+    boruta_confirmed_variables = boruta_confirmed_variables,
     not_selected_valid = setdiff(cand_valid, selected_vars),
     dropped_hi_na = drop_hi_na,
-    dropped_zero_variance = drop_zero
+    dropped_zero_variance = drop_zero,
+    dropped_max_selected = dropped_max_selected,
+    boruta_max_selected = boruta_max_selected
   )
 
   # --- LOG (n, %, quais) ---
