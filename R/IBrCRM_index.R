@@ -15,19 +15,11 @@
 #' @param standardization_method 'mean','discrete','none','min-max'
 #' @param boruta_maxRuns máximo de iterações do Boruta
 #' @param boruta_pValue pValue do Boruta
-#' @param boruta_max_selected número máximo de variáveis confirmadas pelo
-#'   Boruta que seguem para a CFA. Se houver mais confirmações, conserva as
-#'   maiores importâncias médias, com desempate pelo nome. Use \code{NULL}
-#'   para não aplicar limite.
 #' @param cfa_estimator estimador do lavaan (ex.: 'ML')
 #' @param target_variable (opcional) target para Boruta. Se NULL, usa PC1 das candidatas.
 #' @param verbose se TRUE, imprime log da seleção
 #' @param log_fun função de log (ex.: message, cat, function(x) writeLines(x))
 #' @param log_prefix prefixo do log
-#' @param cfa_fallback comportamento quando a CFA falha: \code{"error"} ou
-#'   \code{"uniform"}
-#' @param audit_log_path caminho opcional do CSV persistente de auditoria
-#' @param subindex_name nome do subíndice gravado no log
 #'
 #' @return data.frame com IBrCRM e atributos (selected_variables, weights, boruta_result, selection_report)
 #' @export
@@ -36,23 +28,8 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
                         param_outlier_adjust = 3,
                         standardization_method = c("mean","discrete","none","min-max"),
                         boruta_maxRuns = 100, boruta_pValue = 0.01,
-                        boruta_max_selected = NULL,
                         cfa_estimator = "ML", target_variable = NULL,
-                        verbose = TRUE, log_fun = message, log_prefix = "IBrCRMindex",
-                        cfa_fallback = c("error", "uniform"),
-                        audit_log_path = NULL, subindex_name = NULL) {
-
-  cfa_fallback <- match.arg(cfa_fallback)
-  if (!is.null(boruta_max_selected)) {
-    if (length(boruta_max_selected) != 1L ||
-        is.na(boruta_max_selected) ||
-        !is.finite(boruta_max_selected) ||
-        boruta_max_selected < 2 ||
-        boruta_max_selected != as.integer(boruta_max_selected)) {
-      stop("boruta_max_selected deve ser NULL ou um inteiro maior ou igual a 2.")
-    }
-    boruta_max_selected <- as.integer(boruta_max_selected)
-  }
+                        verbose = TRUE, log_fun = message, log_prefix = "IBrCRMindex") {
 
   stopifnot(requireNamespace("dplyr", quietly = TRUE))
   stopifnot(requireNamespace("tidyr", quietly = TRUE))
@@ -100,7 +77,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
 
   # remove variáveis com variância ~0 (usando tudo disponível)
   var_ok <- vapply(df_analysis[available_vars], function(x) stats::var(x, na.rm = TRUE), numeric(1))
-  drop_zero <- names(var_ok)[!is.finite(var_ok) | var_ok <= 0]
+  drop_zero <- names(var_ok)[is.na(var_ok) | var_ok < 1e-10]
   available_vars <- setdiff(available_vars, drop_zero)
   if (length(available_vars) < 2) stop("Após remover variância ~0, sobraram <2 variáveis.")
 
@@ -155,20 +132,12 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   }
   if (length(selected_vars) == 0) selected_vars <- available_vars[1:min(5, length(available_vars))]
 
-  boruta_confirmed_variables <- selected_vars
-  dropped_max_selected <- character(0)
-  if (!is.null(boruta_max_selected) &&
-      length(selected_vars) > boruta_max_selected) {
-    boruta_stats <- Boruta::attStats(boruta_result)
-    importance <- stats::setNames(
-      boruta_stats$meanImp,
-      rownames(boruta_stats)
-    )
-    priority <- selected_vars[
-      order(-importance[selected_vars], selected_vars, na.last = TRUE)
-    ]
-    dropped_max_selected <- priority[-seq_len(boruta_max_selected)]
-    selected_vars <- priority[seq_len(boruta_max_selected)]
+  p <- length(available_vars)
+  max_keep <- max(5, floor(0.5 * p))  # <= ajuste do boruta (cap)
+  if (length(selected_vars) > max_keep) {
+    imp <- Boruta::attStats(boruta_result)
+    imp <- imp[intersect(rownames(imp), selected_vars), , drop = FALSE]
+    selected_vars <- rownames(imp)[order(imp$meanImp, decreasing = TRUE)][1:max_keep]
   }
 
   # -------------------------------
@@ -190,12 +159,9 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
       )
     ),
     selected_variables = selected_vars,
-    boruta_confirmed_variables = boruta_confirmed_variables,
     not_selected_valid = setdiff(cand_valid, selected_vars),
     dropped_hi_na = drop_hi_na,
-    dropped_zero_variance = drop_zero,
-    dropped_max_selected = dropped_max_selected,
-    boruta_max_selected = boruta_max_selected
+    dropped_zero_variance = drop_zero
   )
 
   # --- LOG (n, %, quais) ---
@@ -239,72 +205,10 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
     dplyr::mutate(dplyr::across(dplyr::everything(), ~ suppressWarnings(as.numeric(.x)))) |>
     tidyr::drop_na()
 
-  # A CFA fica singular quando recebe duas medidas exatamente redundantes.
-  # Mantemos, de forma deterministica, a variavel de maior importancia no
-  # Boruta (desempate alfabetico) e registramos as demais como descartadas.
-  dropped_perfect_correlation <- character(0)
-  if (nrow(df_cfa) > 1 && length(selected_vars) >= 2) {
-    boruta_stats <- Boruta::attStats(boruta_result)
-    importance <- stats::setNames(boruta_stats$meanImp, rownames(boruta_stats))
-    priority <- selected_vars[
-      order(-importance[selected_vars], selected_vars, na.last = TRUE)
-    ]
-    cor_cfa <- stats::cor(df_cfa, use = "pairwise.complete.obs")
-    kept <- character(0)
-
-    for (candidate in priority) {
-      is_redundant <- length(kept) > 0 &&
-        any(abs(cor_cfa[candidate, kept]) >= (1 - 1e-10), na.rm = TRUE)
-      if (is_redundant) {
-        dropped_perfect_correlation <- c(
-          dropped_perfect_correlation,
-          candidate
-        )
-      } else {
-        kept <- c(kept, candidate)
-      }
-    }
-
-    selected_vars <- selected_vars[selected_vars %in% kept]
-    df_cfa <- df_cfa[, selected_vars, drop = FALSE]
-  }
-
-  selection_report$dropped_perfect_correlation <- dropped_perfect_correlation
-  selection_report$selected_variables <- selected_vars
-  selection_report$not_selected_valid <- setdiff(cand_valid, selected_vars)
-  selection_report$counts$n_selected <- length(selected_vars)
-  selection_report$counts$pct_selected <- ifelse(
-    selection_report$counts$n_total == 0,
-    NA_real_,
-    100 * length(selected_vars) / selection_report$counts$n_total
-  )
-  if (length(dropped_perfect_correlation) > 0) {
-    .log(
-      "Descartadas (correlacao perfeita; mantida maior importancia Boruta): %s",
-      paste(dropped_perfect_correlation, collapse = ", ")
-    )
-    selection_report$log_text <- paste(
-      selection_report$log_text,
-      paste0(
-        "Drop correlacao perfeita: ",
-        paste(dropped_perfect_correlation, collapse = ", ")
-      ),
-      sep = "\n"
-    )
-  }
-
-  if (length(selected_vars) < 2) {
-    stop(
-      "Menos de duas variaveis nao redundantes permaneceram para a CFA.",
-      call. = FALSE
-    )
-  }
-
   pesos_normalizados <- data.frame(
     variavel = selected_vars,
     peso = 1 / length(selected_vars)
   )
-  cfa_completed <- FALSE
 
   if (nrow(df_cfa) >= 50 && length(selected_vars) >= 2) {
     modelo_cfa <- paste0("fator =~ ", paste(selected_vars, collapse = " + "))
@@ -326,23 +230,10 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
         dplyr::mutate(peso = abs(.data$std) / sum(abs(.data$std))) |>
         dplyr::select(.data$variavel, .data$peso)
 
-      if (nrow(pe) != length(selected_vars) ||
-          any(!is.finite(pe$peso)) ||
-          !isTRUE(all.equal(sum(pe$peso), 1, tolerance = 1e-12))) {
-        stop("CFA retornou pesos invalidos")
-      }
-      cfa_completed <- TRUE
       as.data.frame(pe)
     }, error = function(e) {
       pesos_normalizados
     })
-  }
-
-  if (!cfa_completed && identical(cfa_fallback, "error")) {
-    stop(
-      "A CFA nao produziu pesos validos. Use cfa_fallback = 'uniform' apenas se pesos iguais forem intencionais.",
-      call. = FALSE
-    )
   }
 
   # -------------------------------
@@ -441,70 +332,6 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   attr(IBrCRM, "weights") <- pesos_normalizados
   attr(IBrCRM, "boruta_result") <- boruta_result
   attr(IBrCRM, "selection_report") <- selection_report
-  attr(IBrCRM, "cfa_status") <- if (cfa_completed) "success" else "fallback_uniform"
-
-  if (!is.null(audit_log_path)) {
-    if (length(audit_log_path) != 1L || is.na(audit_log_path) ||
-        !nzchar(audit_log_path)) {
-      stop("audit_log_path deve ser um caminho unico e nao vazio.")
-    }
-
-    audit_dir <- dirname(audit_log_path)
-    dir.create(audit_dir, recursive = TRUE, showWarnings = FALSE)
-    audit_subindex <- if (is.null(subindex_name) || !nzchar(subindex_name)) {
-      "indice"
-    } else {
-      as.character(subindex_name)[1]
-    }
-
-    audit_current <- data.frame(
-      subindicador = audit_subindex,
-      variavel = as.character(pesos_normalizados$variavel),
-      peso = as.numeric(pesos_normalizados$peso),
-      selecionada_boruta = TRUE,
-      cfa_status = attr(IBrCRM, "cfa_status"),
-      package_version = as.character(utils::packageVersion("IBrCRMindex")),
-      stringsAsFactors = FALSE
-    )
-
-    audit_existing <- if (file.exists(audit_log_path)) {
-      tryCatch(
-        utils::read.csv2(audit_log_path, stringsAsFactors = FALSE),
-        error = function(e) {
-          stop("Nao foi possivel ler o log de auditoria existente: ", conditionMessage(e))
-        }
-      )
-    } else {
-      audit_current[0, , drop = FALSE]
-    }
-
-    required_audit_cols <- names(audit_current)
-    if (!all(required_audit_cols %in% names(audit_existing))) {
-      stop("O log de auditoria existente possui esquema incompativel.")
-    }
-    audit_existing <- audit_existing[
-      audit_existing$subindicador != audit_subindex,
-      required_audit_cols,
-      drop = FALSE
-    ]
-    audit_combined <- rbind(audit_existing, audit_current)
-    audit_combined <- audit_combined[
-      order(audit_combined$subindicador, audit_combined$variavel),
-      ,
-      drop = FALSE
-    ]
-
-    audit_tmp <- tempfile(
-      pattern = "ibrcrm_audit_",
-      tmpdir = audit_dir,
-      fileext = ".csv"
-    )
-    on.exit(unlink(audit_tmp), add = TRUE)
-    utils::write.csv2(audit_combined, audit_tmp, row.names = FALSE)
-    if (!file.copy(audit_tmp, audit_log_path, overwrite = TRUE)) {
-      stop("Nao foi possivel atualizar o log de auditoria: ", audit_log_path)
-    }
-  }
 
   IBrCRM
 }
@@ -518,7 +345,6 @@ get_index_info <- function(index_result) {
   list(
     selected_variables = attr(index_result, "selected_variables"),
     weights = attr(index_result, "weights"),
-    cfa_status = attr(index_result, "cfa_status"),
     n_variables = length(attr(index_result, "selected_variables")),
     selection_report = attr(index_result, "selection_report")
   )

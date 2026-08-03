@@ -1,9 +1,7 @@
 Type: Package
 Package: IBrCRMindex
 Title: Indice Brasileiro de Competitividade Regional Municipal (IBrCRM)
-Version: 0.3.0
-Author: Pedro Jorge [aut, cre], Hyolitta Araujo [aut], Pierre Hitalo [aut],
-    Wallace Souza [aut], Jevuks Araujo [aut], UFPB [cph, fnd]
+Version: 0.1.0
 Authors@R: c(
     person("Pedro","Jorge", role=c("aut","cre"), email="pedro.alves@ipea.gov.br"),
     person("Hyolitta","Araújo", role="aut", email="hyolitta01@gmail.com"),
@@ -21,11 +19,9 @@ BugReports: https://github.com/PedroJorge7/IBrCRM_index/issues
 Depends: 
     R (>= 3.3.2)
 Imports:
-    Boruta,
     dplyr,
     tidyr,
     glmnet,
-    lavaan,
     stats,
     scales,
     ggplot2
