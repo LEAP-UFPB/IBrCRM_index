@@ -7,56 +7,63 @@
 IBrCRMindex(
   df,
   variables,
-  reference_variables,
-  inverse_variables,
+  inverse_variables = NULL,
   group_by = NULL,
   adjust_outliers = TRUE,
-  include_weight = TRUE,
-  standardization_method = c("mean", "discrete", "none")
+  param_outlier_adjust = 3,
+  standardization_method = c("mean", "discrete", "none", "min-max"),
+  boruta_maxRuns = 100,
+  boruta_pValue = 0.01,
+  redundancy_groups = NULL,
+  cfa_estimator = "ML",
+  target_variable = NULL,
+  verbose = TRUE,
+  log_fun = message,
+  log_prefix = "IBrCRMindex"
 )
 }
 \arguments{
-\item{variables}{A character vector specifying the axis style. Valid options are
-\code{"none"} (no axis lines), \code{"full"} (full-length axis lines), and
-\code{"half"} (half-length axis lines), the default.}
+\item{df}{Data frame com as colunas \code{code_muni}, \code{ano} e os
+indicadores candidatos.}
 
-\item{reference_variables}{Logical value indicating whether to show text elements. If \code{TRUE},
-axis text will be displayed in black; otherwise, they will
-be hidden.}
+\item{variables}{Vetor com os nomes dos indicadores candidatos.}
 
-\item{inverse_variables}{A character vector specifying the position of the
-legend. Valid options are \code{"right"} (default), \code{"left"}, \code{"top"}, and
-\code{"bottom"}.}
+\item{inverse_variables}{Indicadores cuja polaridade deve ser invertida.}
 
-\item{group_by}{Defines whether the grid lines should be \code{"horizontal"}
-(default) or \code{"vertical"}.}
+\item{group_by}{Coluna territorial usada na normalização. Se \code{NULL}, não
+há agrupamento territorial.}
 
-\item{adjust_outliers}{Numeric. The number of breaks on the x-axis}
+\item{adjust_outliers}{Se \code{TRUE}, aplica winsorização pelo intervalo
+interquartil.}
 
-\item{include_weight}{Numeric. The number of breaks on the y-axis}
+\item{param_outlier_adjust}{Multiplicador do intervalo interquartil.}
 
-\item{standardization_method}{Logical value that indicates whether the x-axis
-boundary should be expanded. If \code{TRUE}, the x-axis limits will be
-expanded; otherwise there will be no change}
+\item{standardization_method}{Método de padronização do índice.}
+
+\item{boruta_maxRuns}{Número máximo de iterações do Boruta.}
+
+\item{boruta_pValue}{Nível de significância do Boruta.}
+
+\item{redundancy_groups}{Lista nomeada de grupos conceituais redundantes.
+Depois do Boruta, somente o indicador com maior importância média de cada
+grupo segue para a CFA. Empates são resolvidos pelo nome da variável.}
+
+\item{cfa_estimator}{Estimador utilizado pelo \code{lavaan}.}
+
+\item{target_variable}{Alvo opcional do Boruta. Se \code{NULL}, utiliza o
+primeiro componente principal dos indicadores candidatos.}
+
+\item{verbose}{Se \code{TRUE}, apresenta o relatório da seleção.}
+
+\item{log_fun}{Função utilizada para registrar mensagens.}
+
+\item{log_prefix}{Prefixo das mensagens.}
 }
 \value{
-A \code{data.frame} output.
+Data frame com o índice e atributos que registram variáveis selecionadas,
+pesos, resultado do Boruta e relatório de seleção.
 }
 \description{
-Creation of an inequality index capable of selecting important variables,
-weights for each variable and normalizing the selected variables.
+Seleciona indicadores pelo Boruta, remove redundâncias conceituais declaradas,
+estima pesos por CFA, normaliza os indicadores e calcula o IBrCRM.
 }
-\examples{
-library(dplyr)
-variables <- c('mpg','cyl','hp','drat','wt','qsec','vs','am','gear')
-reference_variables <- c('cyl','mpg')
-group_by <- c('carb')
-inverse_variables <- c('wt')
-
-IBrCRM <- IBrCRMindex(mtcars,variables = variables, reference_variables = reference_variables,
-                       inverse_variables = inverse_variables,
-                       group_by = group_by,
-                       adjust_outliers =TRUE, include_weight = TRUE,
-                       standardization_method = c('mean'))
-}
-\concept{IBrCRMindex output}

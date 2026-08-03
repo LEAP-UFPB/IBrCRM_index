@@ -15,6 +15,9 @@
 #' @param standardization_method 'mean','discrete','none','min-max'
 #' @param boruta_maxRuns máximo de iterações do Boruta
 #' @param boruta_pValue pValue do Boruta
+#' @param redundancy_groups lista nomeada de grupos conceituais redundantes.
+#' Depois do Boruta, somente a variável de maior importância média de cada
+#' grupo segue para a CFA. Empates são resolvidos pelo nome da variável.
 #' @param cfa_estimator estimador do lavaan (ex.: 'ML')
 #' @param target_variable (opcional) target para Boruta. Se NULL, usa PC1 das candidatas.
 #' @param verbose se TRUE, imprime log da seleção
@@ -28,6 +31,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
                         param_outlier_adjust = 3,
                         standardization_method = c("mean","discrete","none","min-max"),
                         boruta_maxRuns = 100, boruta_pValue = 0.01,
+                        redundancy_groups = NULL,
                         cfa_estimator = "ML", target_variable = NULL,
                         verbose = TRUE, log_fun = message, log_prefix = "IBrCRMindex") {
 
@@ -140,6 +144,59 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
     selected_vars <- rownames(imp)[order(imp$meanImp, decreasing = TRUE)][1:max_keep]
   }
 
+  # ETAPA 2.1: redundancia conceitual, depois do Boruta e antes da CFA.
+  selected_by_boruta <- selected_vars
+  dropped_redundancy <- data.frame(
+    grupo = character(0),
+    removida = character(0),
+    mantida = character(0),
+    stringsAsFactors = FALSE
+  )
+
+  if (!is.null(redundancy_groups)) {
+    if (!is.list(redundancy_groups)) {
+      stop("redundancy_groups deve ser NULL ou uma lista.")
+    }
+
+    group_names <- names(redundancy_groups)
+    if (is.null(group_names)) group_names <- rep("", length(redundancy_groups))
+    unnamed <- which(group_names == "")
+    group_names[unnamed] <- paste0("grupo_", unnamed)
+
+    boruta_stats <- Boruta::attStats(boruta_result)
+    importance <- stats::setNames(
+      boruta_stats$meanImp,
+      rownames(boruta_stats)
+    )
+
+    for (i in seq_along(redundancy_groups)) {
+      members <- unique(as.character(redundancy_groups[[i]]))
+      present <- intersect(selected_vars, members)
+      if (length(present) <= 1L) next
+
+      scores <- importance[present]
+      scores[!is.finite(scores)] <- -Inf
+      priority <- present[order(-scores, present)]
+      keep <- priority[[1]]
+      remove <- priority[-1]
+
+      selected_vars <- setdiff(selected_vars, remove)
+      dropped_redundancy <- rbind(
+        dropped_redundancy,
+        data.frame(
+          grupo = rep(group_names[[i]], length(remove)),
+          removida = remove,
+          mantida = rep(keep, length(remove)),
+          stringsAsFactors = FALSE
+        )
+      )
+    }
+  }
+
+  if (length(selected_vars) < 2L) {
+    stop("O filtro de redundancia deixou menos de duas variaveis para a CFA.")
+  }
+
   # -------------------------------
   # RELATÓRIO: SELEÇÃO DE VARIÁVEIS (n, quais, %)
   # -------------------------------
@@ -158,7 +215,9 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
         ifelse(length(cand_valid) == 0, NA_real_, 100 * length(selected_vars) / length(cand_valid))
       )
     ),
+    selected_by_boruta = selected_by_boruta,
     selected_variables = selected_vars,
+    dropped_redundancy = dropped_redundancy,
     not_selected_valid = setdiff(cand_valid, selected_vars),
     dropped_hi_na = drop_hi_na,
     dropped_zero_variance = drop_zero
@@ -178,6 +237,23 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
 
   .log("Variáveis selecionadas: %s", paste(selected_vars, collapse = ", "))
 
+  if (nrow(dropped_redundancy) > 0) {
+    .log(
+      "Descartadas por redundancia: %s",
+      paste(
+        paste0(
+          dropped_redundancy$removida,
+          " [",
+          dropped_redundancy$grupo,
+          "; mantida ",
+          dropped_redundancy$mantida,
+          "]"
+        ),
+        collapse = ", "
+      )
+    )
+  }
+
   if (length(drop_hi_na) > 0)
     .log("Descartadas (>80%% NA): %s", paste(drop_hi_na, collapse = ", "))
 
@@ -192,6 +268,22 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
            " | in_df=", length(cand_in_df),
            " | valid=", length(cand_valid)),
     paste0("Selecionadas: ", paste(selected_vars, collapse = ", ")),
+    paste0("Selecionadas pelo Boruta: ", paste(selected_by_boruta, collapse = ", ")),
+    paste0("Usadas na CFA: ", paste(selected_vars, collapse = ", ")),
+    if (nrow(dropped_redundancy) > 0) paste0(
+      "Drop redundancia: ",
+      paste(
+        paste0(
+          dropped_redundancy$removida,
+          " [",
+          dropped_redundancy$grupo,
+          "; mantida ",
+          dropped_redundancy$mantida,
+          "]"
+        ),
+        collapse = ", "
+      )
+    ) else NULL,
     if (length(drop_hi_na) > 0) paste0("Drop >80% NA: ", paste(drop_hi_na, collapse = ", ")) else NULL,
     if (length(drop_zero) > 0) paste0("Drop var~0: ", paste(drop_zero, collapse = ", ")) else NULL,
     sep = "\n"
