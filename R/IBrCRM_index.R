@@ -136,6 +136,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   }
   if (length(selected_vars) == 0) selected_vars <- available_vars[1:min(5, length(available_vars))]
 
+  boruta_confirmed_variables <- selected_vars
   p <- length(available_vars)
   max_keep <- max(5, floor(0.5 * p))  # <= ajuste do boruta (cap)
   if (length(selected_vars) > max_keep) {
@@ -145,7 +146,7 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
   }
 
   # ETAPA 2.1: redundancia conceitual, depois do Boruta e antes da CFA.
-  selected_by_boruta <- selected_vars
+  selected_after_boruta_cap <- selected_vars
   dropped_redundancy <- data.frame(
     grupo = character(0),
     removida = character(0),
@@ -215,7 +216,8 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
         ifelse(length(cand_valid) == 0, NA_real_, 100 * length(selected_vars) / length(cand_valid))
       )
     ),
-    selected_by_boruta = selected_by_boruta,
+    boruta_confirmed_variables = boruta_confirmed_variables,
+    selected_after_boruta_cap = selected_after_boruta_cap,
     selected_variables = selected_vars,
     dropped_redundancy = dropped_redundancy,
     not_selected_valid = setdiff(cand_valid, selected_vars),
@@ -268,7 +270,14 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
            " | in_df=", length(cand_in_df),
            " | valid=", length(cand_valid)),
     paste0("Selecionadas: ", paste(selected_vars, collapse = ", ")),
-    paste0("Selecionadas pelo Boruta: ", paste(selected_by_boruta, collapse = ", ")),
+    paste0(
+      "Confirmadas pelo Boruta: ",
+      paste(boruta_confirmed_variables, collapse = ", ")
+    ),
+    paste0(
+      "Após limite histórico: ",
+      paste(selected_after_boruta_cap, collapse = ", ")
+    ),
     paste0("Usadas na CFA: ", paste(selected_vars, collapse = ", ")),
     if (nrow(dropped_redundancy) > 0) paste0(
       "Drop redundancia: ",
