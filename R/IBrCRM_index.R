@@ -239,6 +239,13 @@ IBrCRMindex <- function(df, variables, inverse_variables = NULL,
 
   .log("Variáveis selecionadas: %s", paste(selected_vars, collapse = ", "))
 
+  .log(
+    "Contagem: Boruta=%d | apos limite=%d | final para CFA/indice=%d",
+    length(boruta_confirmed_variables),
+    length(selected_after_boruta_cap),
+    length(selected_vars)
+  )
+
   if (nrow(dropped_redundancy) > 0) {
     .log(
       "Descartadas por redundancia: %s",
